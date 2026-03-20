@@ -1,0 +1,4 @@
+algorithm,score,towers,total_cost
+A_WindowSA,6.83797e-05,13,372000
+B_GlobalGreedy,0.00134042,23,390000
+C_ClusterGreedy,0.000191921,33,396000
