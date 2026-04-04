@@ -438,7 +438,7 @@ public:
   // Call this ONCE after all applyTowerSignal calls, not per tower.
   // BUG FIX: building cells (obstacles) are excluded.
   // -----------------------------------------------------------
-  void resolveNetworkCapacity(double total_capacity)
+ void resolveNetworkCapacity(double total_capacity)
   {
     double total_required = 0.0;
 
@@ -451,7 +451,12 @@ public:
         {
           double sinr = c.signal_strength / params.noise_floor;
           c.efficiency = std::log2(1.0 + sinr);
-          total_required += c.demand / (c.efficiency + 1e-6);
+          
+          // FIX: Only cells with a usable connection compete for capacity
+          if (c.efficiency > 0.01) 
+          {
+            total_required += c.demand / c.efficiency;
+          }
         }
       }
 
@@ -467,23 +472,24 @@ public:
         Cell &c = cells[j][i];
         if (c.demand > 0 && !c.is_building)
         {
-          double req_cap = c.demand / (c.efficiency + 1e-6);
-          c.allocated_capacity = req_cap * alloc;
-          double fulfilled = c.allocated_capacity * c.efficiency;
-          c.qos_percentage = (fulfilled / c.demand) * 100.0;
+          // FIX: Apply allocation only to connected cells
+          if (c.efficiency > 0.01) 
+          {
+            double req_cap = c.demand / c.efficiency;
+            c.allocated_capacity = req_cap * alloc;
+            double fulfilled = c.allocated_capacity * c.efficiency;
+            
+            // FIX: Cap QoS at 100.0 to prevent over-delivery from inflating scores
+            c.qos_percentage = std::min(100.0, (fulfilled / c.demand) * 100.0);
+          } 
+          else 
+          {
+            c.qos_percentage = 0.0;
+            c.allocated_capacity = 0.0;
+          }
         }
       }
-
-    // std::cout << "\n--- Network Resolution ---\n"
-    //           << "Total Capacity:  " << total_capacity << " units\n"
-    //           << "Total Required:  " << total_required << " units\n";
-    // if (alloc < 1.0)
-    //   std::cout << "STATUS: CONGESTED — throttling to "
-    //             << (alloc * 100.0) << "%\n";
-    // else
-    //   std::cout << "STATUS: OK — all demand met.\n";
   }
-
   // -----------------------------------------------------------
   // Demand-weighted average QoS across all non-building cells
   // with demand. Returns 0–100.
@@ -1200,7 +1206,7 @@ int main()
   Grid grid(300, 250, 42, hp);
   std::cout << "here\n";
   grid.addBuildingsRandomly(20.0, 80.0, 15.0);
-  grid.addRandomDemand(50);
+  grid.addRandomDemand(10);
   grid.setDemand(40, 50, 100.0);  // Hotspot 1
   grid.setDemand(110, 50, 100.0); // Hotspot 2
   grid.setDemand(200, 150, 80.0); // Hotspot 3
@@ -1258,3 +1264,4 @@ int main()
 
   return 0;
 }
+
