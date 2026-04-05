@@ -491,42 +491,43 @@ void printTable(const std::vector<AlgorithmResult>&all){
 // ############################################################
 //  MAIN
 // ############################################################
-int main()
+int main(int argc, char* argv[])
 {
   Hyperparameters hp;
   hp.path_loss_exp=3.5; hp.atten_per_unit=0.20;
   hp.diff_strength=0.60; hp.diff_exp=4.0; hp.noise_floor=1e-4;
 
   // ============================================================
-  //  PART 1: 9x9 Grid — CSP vs SA
+  //  PART 1: Small Grid — CSP vs SA
+  //  Usage: ./tower [rows] [cols]
+  //  Default: 10x10
   // ============================================================
   
-  {// ============================================================
-//  PART 1: Randomized 9x9 Grid — CSP vs SA
-// ============================================================
+  {
+    int R = 10, C = 10;
+    if(argc >= 3) {
+      R = std::atoi(argv[1]);
+      C = std::atoi(argv[2]);
+      if(R < 3) R = 3;
+      if(C < 3) C = 3;
+      if(R > 50) R = 50;  // Cap small grid so CSP doesn't hang forever
+      if(C > 50) C = 50;
+    }
 
-    const int R = 20, C = 20; 
-    double budget = 25000; // Adjusted budget for small scale
+    double budget = 25000;
     std::vector<TowerType> types = {
         {"Macro", 0.15, 5000, 30}, 
         {"Micro", 0.02, 2500, 15}, 
         {"Pico", 0.004, 1000, 8}
     };
     std::cout << "============================================================\n"
-            << "  Part 1: 10x10 Grid — CSP vs Heuristic Algorithms\n"
-            << "============================================================\n\n";
-    // Use a fixed seed for Part 1 so you can compare CSP vs SA fairly
-    Grid grid(C, R, 42, hp); 
+              << "  Part 1: " << R << "x" << C << " Grid — CSP vs Heuristic Algorithms\n"
+              << "============================================================\n\n";
 
-    // --- RANDOM GENERATION FOR SMALL SCALE ---
-    // Small buildings (1-2 cells) so we don't block the whole map
+    Grid grid(C, R, 42, hp); 
     grid.addBuildingsRandomly(1.0, 2.0, 1.0); 
-    
-    // Higher probability (40%) so the 9x9 doesn't end up empty
     grid.addRandomDemand(10, 0.4); 
 
-    // --- EXTRACT DATA FOR CSP ---
-    // The CSP solver needs the state of the grid after randomization
     std::vector<std::vector<double>> random_dem(R, std::vector<double>(C, 0));
     std::vector<std::vector<bool>> random_bl(R, std::vector<bool>(C, false));
     std::vector<std::pair<int, int>> tpos;
@@ -539,24 +540,22 @@ int main()
         }
     }
 
-    // Build the CSP problem from the randomized state
     CSPProblem csp = buildCSP(R, C, random_dem, random_bl, types, tpos, hp);
-    
     std::cout<<"CSP: "<<csp.cells.size()<<" variables, "<<csp.towers.size()<<" candidate towers\n\n";
 
     std::vector<AlgorithmResult> all;
 
     // CSP variants
     struct Cfg{std::string n;bool m,l,f,a;};
-    for(auto &cfg:std::vector<Cfg>{{"D: Plain BT",false,false,false,false},
-        {"D: MRV",true,false,false,false},{"D: MRV+LCV",true,true,false,false}}){
+    for(auto &cfg:std::vector<Cfg>{{"D_PlainBT",false,false,false,false},
+        {"D_MRV",true,false,false,false},{"D_MRV_LCV",true,true,false,false}}){
       std::cout<<"Running "<<cfg.n<<" ..."; std::cout.flush();
       CSPSolver s(csp,types,cfg.m,cfg.l,cfg.f,cfg.a);
       auto t0=std::chrono::steady_clock::now();CSPResult cr=s.run(budget,60);
       double sec=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
       AlgorithmResult ar=cspToResult(grid,cr,csp,types,cfg.n);ar.nodes=cr.nodes;ar.time_sec=sec;
       std::cout<<(cr.solved?" SOLVED":" FAIL")<<"  score="<<std::fixed<<std::setprecision(2)<<ar.score
-        <<"%  $"<<ar.total_cost<<"  "<<std::setprecision(4)<<sec<<"s\n";
+        <<"%  $"<<ar.total_cost<<"  nodes="<<cr.nodes<<"  "<<std::setprecision(4)<<sec<<"s\n";
       all.push_back(ar);}
 
     // SA variants on same small grid
@@ -568,20 +567,38 @@ int main()
       std::cout<<"  score="<<std::fixed<<std::setprecision(2)<<r.score<<"%  $"<<r.total_cost
         <<"  "<<std::setprecision(4)<<r.time_sec<<"s\n";
       all.push_back(r);};
-    runSA(algorithmA_WindowSA,"A: Window+SA");
-    runSA(algorithmB_GlobalGreedySA,"B: Greedy+SA");
-    runSA(algorithmC_ClusterGreedySA,"C: Cluster+SA");
+    runSA(algorithmA_WindowSA,"A_WindowSA");
+    runSA(algorithmB_GlobalGreedySA,"B_GlobalGreedy");
+    runSA(algorithmC_ClusterGreedySA,"C_ClusterSA");
 
     std::cout<<"\n"; printTable(all);
 
-    // Export small grid data
+    // Export grid data + grid dimensions
     exportGrid("small_buildings.csv","small_demand.csv",R,C,random_dem,random_bl);
+    
+    // Write grid dimensions so the plot script knows the size
+    {std::ofstream f("small_grid_info.csv");
+     f<<"rows,cols\n"<<R<<","<<C<<"\n";}
+
+    // Export ALL algorithm placements (not just best)
+    for(auto &r:all){
+      if(r.placements.empty()) continue;  // skip failed runs (e.g. Plain BT timeout)
+      exportPlacements("small_"+r.name+"_towers.csv",r,types);
+    }
+
+    // Also export a summary table
+    {std::ofstream f("small_results.csv");
+     f<<"algorithm,score,towers,cost,nodes,time\n";
+     for(auto &r:all)
+       f<<r.name<<","<<std::fixed<<std::setprecision(2)<<r.score
+        <<","<<r.placements.size()
+        <<","<<std::setprecision(0)<<r.total_cost
+        <<","<<r.nodes
+        <<","<<std::setprecision(4)<<r.time_sec<<"\n";}
+
     AlgorithmResult *bC=nullptr,*bS=nullptr;
     for(auto &r:all){if(r.name[0]=='D'&&(!bC||r.total_cost<bC->total_cost||(r.total_cost==bC->total_cost&&r.score>bC->score)))bC=&r;
       if(r.name[0]!='D'&&(!bS||r.score>bS->score))bS=&r;}
-    if(bC)exportPlacements("small_csp_towers.csv",*bC,types);
-    if(bS)exportPlacements("small_sa_towers.csv",*bS,types);
-
     std::cout<<"\nBest CSP: "<<(bC?bC->name:"-")<<"  score="<<(bC?bC->score:0)<<"%  $"<<(bC?bC->total_cost:0)<<"\n";
     std::cout<<"Best SA:  "<<(bS?bS->name:"-")<<"  score="<<(bS?bS->score:0)<<"%  $"<<(bS?bS->total_cost:0)<<"\n";
     if(bC&&bS&&std::abs(bC->score-bS->score)<0.5)
@@ -612,6 +629,10 @@ int main()
     std::cout<<"Budget: $"<<budget<<"\n";
     std::cout<<"CSP would need "<<nd<<" variables — computationally infeasible.\n\n";
 
+    // Write grid dimensions
+    {std::ofstream f("big_grid_info.csv");
+     f<<"rows,cols\n250,300\n";}
+
     std::vector<AlgorithmResult> results;
     auto runAlg=[&](auto fn,const std::string &label){
       std::mt19937 rng(42);
@@ -627,7 +648,7 @@ int main()
 
     runAlg(algorithmA_WindowSA,"A_WindowSA");
     runAlg(algorithmB_GlobalGreedySA,"B_GlobalGreedy");
-    runAlg(algorithmC_ClusterGreedySA,"C_ClusterGreedy");
+    runAlg(algorithmC_ClusterGreedySA,"C_ClusterSA");
 
     std::cout<<"\n"; printTable(results);
 
@@ -635,18 +656,26 @@ int main()
       [](const AlgorithmResult &a,const AlgorithmResult &b){return a.score<b.score;});
     std::cout<<"\nWinner: "<<best->name<<" (score "<<std::fixed<<std::setprecision(2)<<best->score<<"%)\n";
 
-    // Export big grid data
-    // Build buildings/demand arrays for export
     std::vector<std::vector<bool>> bl2(250,std::vector<bool>(300,false));
     std::vector<std::vector<double>> dem2(250,std::vector<double>(300,0));
     for(int j=0;j<250;++j)for(int i=0;i<300;++i){
       bl2[j][i]=grid.isBuilding(i,j);
       dem2[j][i]=grid.getDemand(i,j);}
     exportGrid("big_buildings.csv","big_demand.csv",250,300,dem2,bl2);
-    exportPlacements("big_sa_towers.csv",*best,types);
 
-    // Export each algorithm
-    for(auto &r:results)exportPlacements(r.name+"_towers.csv",r,types);
+    // Export ALL algorithm placements
+    for(auto &r:results)
+      exportPlacements("big_"+r.name+"_towers.csv",r,types);
+
+    // Summary table
+    {std::ofstream f("big_results.csv");
+     f<<"algorithm,score,towers,cost,nodes,time\n";
+     for(auto &r:results)
+       f<<r.name<<","<<std::fixed<<std::setprecision(2)<<r.score
+        <<","<<r.placements.size()
+        <<","<<std::setprecision(0)<<r.total_cost
+        <<","<<r.nodes
+        <<","<<std::setprecision(4)<<r.time_sec<<"\n";}
   }
 
   return 0;

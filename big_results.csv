@@ -1,0 +1,4 @@
+algorithm,score,towers,cost,nodes,time
+A_WindowSA,97.17,14,396000,0,9.8311
+B_GlobalGreedy,86.66,26,396000,0,13.0753
+C_ClusterSA,59.07,33,396000,0,8.5860
