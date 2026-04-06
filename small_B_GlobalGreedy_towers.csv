@@ -1,4 +1,5 @@
 x,y,type,name
-0,9,0,Macro
-9,9,1,Micro
-5,1,0,Macro
+8,8,0,Macro
+0,8,2,Pico
+0,0,0,Macro
+8,0,0,Macro

@@ -1,0 +1,4 @@
+name,power,cost,capacity
+Macro,0.155,5000,37
+Micro,0.019,2505,15
+Pico,0.003,1002,14

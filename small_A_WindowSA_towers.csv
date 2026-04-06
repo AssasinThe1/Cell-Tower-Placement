@@ -1,5 +1,7 @@
 x,y,type,name
-5,0,0,Macro
-1,9,1,Micro
-2,0,2,Pico
-9,6,1,Micro
+13,9,0,Macro
+0,0,0,Macro
+7,2,1,Micro
+11,2,2,Pico
+4,2,2,Pico
+3,8,1,Micro

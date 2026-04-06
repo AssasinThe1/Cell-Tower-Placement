@@ -1,8 +1,9 @@
 x,y,type,name
-4,8,2,Pico
-3,2,2,Pico
-2,1,2,Pico
-7,2,2,Pico
-0,5,0,Macro
-0,0,0,Macro
-2,6,0,Macro
+8,6,2,Pico
+13,0,2,Pico
+12,3,2,Pico
+13,8,2,Pico
+5,5,0,Macro
+2,9,0,Macro
+6,8,0,Macro
+10,2,0,Macro

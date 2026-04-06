@@ -75,6 +75,9 @@ g++ -O2 -std=c++17 -o tower tower.cpp
 # Generate plots (requires matplotlib)
 pip install matplotlib
 python plot.py
+
+# gui 
+python tower_gui.py
 ```
 
 The small grid size is capped at 50×50 so the CSP doesn't run forever. The large grid (Part 2) is always 300×250.
