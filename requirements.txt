@@ -1,0 +1,11 @@
+PyQt6
+ast
+csv
+glob
+math
+matplotlib
+numpy
+os
+pathlib
+random
+sys
